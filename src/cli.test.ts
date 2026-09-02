@@ -230,6 +230,112 @@ describe("arg and exit paths", () => {
   });
 });
 
+describe("file selection", () => {
+  const multiTorrent = () => {
+    const tor = new FakeTorrent();
+    tor.files = [
+      makeFile("Sintel.en.srt", "subs/Sintel.en.srt", 300),
+      makeFile("Movie 1080p.mkv", "Movie 1080p.mkv", 2_255_458_304), // 2.1 GB
+      makeFile("sample.mp4", "sample.mp4", 34_000_000),
+      makeFile("notes.txt", "notes.txt", 10),
+    ];
+    return tor;
+  };
+  const pickViaPrompt = (t: TestContext, answer: string) => {
+    const env = testEnv(t);
+    return {
+      env,
+      deps: {
+        TorrentClient: FakeClient as never,
+        createInterfaceFn: (() => ({
+          question: async () => answer,
+          close() {},
+        })) as never,
+      },
+    };
+  };
+
+  it("multi-file: picker lists media files with sizes, pick 2", async (t) => {
+    const tor = multiTorrent();
+    FakeClient.makeTorrent = () => tor;
+    const { env, deps } = pickViaPrompt(t, "2");
+    await main(["magnet:?x"], deps);
+    const out = env.writes.join("");
+    assert.ok(out.includes("1. Movie 1080p.mkv  (2.1 GB)"));
+    assert.ok(out.includes("2. sample.mp4  (32.4 MB)"));
+    assert.ok(!out.includes("Sintel.en.srt  (")); // subtitles are not listed
+    // picked file selected, others deselected; srt is not media so untouched by media loop
+    assert.equal(tor.files[2].selectCalls, 1); // sample.mp4 = media #2
+    assert.equal(tor.files[0].selectCalls, 1); // subtitle still selected
+    assert.equal(tor.files[1].deselectCalls, 1); // Movie not picked
+    assert.equal(tor.files[3].selectCalls, 0); // non-media never selected at all
+    // URL encodes the full file.path
+    assert.ok(
+      out.includes(
+        "/webtorrent/aaaa1111bbbb2222cccc3333dddd4444eeee5555/sample.mp4",
+      ),
+    );
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 0);
+  });
+
+  it("multi-file: non-numeric pick exits 1", async (t) => {
+    FakeClient.makeTorrent = () => multiTorrent();
+    const { env, deps } = pickViaPrompt(t, "abc");
+    await assert.rejects(
+      () => main(["magnet:?x"], deps),
+      (e: unknown) => e instanceof CliExitError && e.code === 1,
+    );
+    assert.equal(env.exits[0], 1);
+  });
+
+  it("multi-file: out-of-range pick exits 1", async (t) => {
+    FakeClient.makeTorrent = () => multiTorrent();
+    const { env, deps } = pickViaPrompt(t, "99");
+    await assert.rejects(
+      () => main(["magnet:?x"], deps),
+      (e: unknown) => e instanceof CliExitError && e.code === 1,
+    );
+    assert.equal(env.exits[0], 1);
+  });
+
+  it("--file skips the prompt and picks by media index", async (t) => {
+    const env = testEnv(t);
+    const tor = multiTorrent();
+    FakeClient.makeTorrent = () => tor;
+    // only 2 media files exist (srt/txt are not media) — sample.mp4 is #2
+    await main(["magnet:?x", "--file", "2"], {
+      TorrentClient: FakeClient as never,
+    });
+    assert.equal(tor.files[2].selectCalls, 1); // sample.mp4
+    assert.ok(env.writes.join("").includes("sample.mp4"));
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 0);
+  });
+
+  it("--file out of range exits 1", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => multiTorrent();
+    await assert.rejects(
+      () => main(["magnet:?x", "--file", "9"], { TorrentClient: FakeClient as never }),
+      (e: unknown) => e instanceof CliExitError && e.code === 1,
+    );
+    assert.equal(env.exits[0], 1);
+  });
+
+  it("--file 1 works on a single-file torrent", async (t) => {
+    const env = testEnv(t);
+    const tor = singleTorrent();
+    FakeClient.makeTorrent = () => tor;
+    await main(["magnet:?x", "--file", "1"], {
+      TorrentClient: FakeClient as never,
+    });
+    assert.equal(tor.files[0].selectCalls, 1);
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 0);
+  });
+});
+
 describe("pure helpers", () => {
   it("humanBytes scales", () => {
     assert.equal(humanBytes(0), "0 B");
