@@ -1,10 +1,18 @@
 # wstream
 
-Windows-first torrent streaming CLI. Download a file from a torrent sequentially, stream it over local HTTP, and play it in any player.
+A minimal torrent streaming CLI, built and tested on Windows. It downloads one file from a torrent sequentially, serves it over local HTTP, and can launch your player against the stream URL.
 
-Born from frustration: peerflix is unmaintained and leaks `%TEMP%\torrent-stream` folders forever on Windows; webtorrent-cli's player spawning breaks on Windows. `wstream` does one thing correctly: it streams one file, cleans up after itself, and stays honest about what's happening.
+wstream is built on the [webtorrent](https://github.com/webtorrent/webtorrent) library — the same engine used by [webtorrent-cli](https://github.com/webtorrent/webtorrent-cli). All torrent protocol work (DHT, trackers, piece selection, HTTP serving with range requests) is done by that library. wstream itself is a small CLI layer on top of it.
+
+Compared to webtorrent-cli, wstream is deliberately narrower: it streams one file and cleans up after itself. webtorrent-cli has more features (download/seed commands, Chromecast, AirPlay) and is actively maintained — if it works for you, use it. What wstream tries to get right, primarily on Windows:
+
+- Temp files go to `%TEMP%\win-web-torrent\<infohash>` and are deleted on exit. Folders left by a crash are swept at the next startup.
+- No player is launched unless you ask for it with `--player <cmd>`. The player is invoked as `<cmd> <stream-url>` with no per-player special cases, which sidesteps the player-spawn bugs those tools have had on Windows.
+- One in-place status line showing progress, speed, and peer count — no dashboard, no hidden failures.
 
 ## Install
+
+Requires Node 18+ (the published bundle) or Node 22.6+ to run from source.
 
 ```sh
 npm i -g win-web-torrent
@@ -22,10 +30,10 @@ Single-file torrents start streaming immediately. Multi-file torrents show a num
 wstream "magnet:?xt=urn:btih:..."                # print stream URL, Ctrl+C to stop
 wstream "magnet:?..." --player mpv               # spawn mpv with the stream URL
 wstream "magnet:?..." --player mpv --player-args "--fullscreen"
-wstream movie.torrent --file 2                   # stream the 2nd media file, skip picker
+wstream movie.torrent --file 2                   # stream the 2nd media file, skip the prompt
 ```
 
-Subtitles (`.srt`, `.ass`, `.ssa`, `.vtt`, `.sub`) found in the torrent are downloaded and served automatically — their URLs are printed for your player.
+Subtitle files (`.srt`, `.ass`, `.ssa`, `.vtt`, `.sub`) found in the same torrent are also downloaded and served; their URLs are printed so your player can load them.
 
 ## Flags
 
@@ -38,12 +46,12 @@ Subtitles (`.srt`, `.ass`, `.ssa`, `.vtt`, `.sub`) found in the torrent are down
 | `--dir <path>` | Download location (default: `%TEMP%\win-web-torrent`). |
 | `--keep` | Keep downloaded files after the stream ends. |
 
-## Behavior
+## Behavior and limits
 
-- **Sequential download** prioritized for the picked file so playback starts fast and seeking stays ahead of the player.
-- **Cleanup**: the torrent is destroyed and temp files deleted when the player exits or you press Ctrl+C. Folders orphaned by a crash are swept at the next startup.
-- **No seeding**: uploads end when the stream ends.
-- **Honest status**: one in-place line with percent, size, speed, and peer count. If peers are 0, it says so.
+- The picked file's pieces are prioritized for sequential download; pieces needed by the player are fetched on demand, so seeking works before the download completes. How far ahead of playback this keeps you depends on swarm speed.
+- On player exit or Ctrl+C, the torrent is destroyed and temp files are deleted. Nothing is seeded.
+- One stream at a time. No download manager, no resume, no Chromecast/AirPlay, no media search.
+- Tested on Windows 11 with Node 24 and with mpv. Other setups and players should work — the player interface is just `<cmd> <url>` — but are untested.
 
 ## Development
 
@@ -52,7 +60,6 @@ Requires Node 22.6+ (native TypeScript) and pnpm.
 ```sh
 pnpm install
 pnpm dev -- <magnet>       # run from source
-pnpm test                  # unit tests (node:test)
 pnpm build                 # bundle dist/cli.js for publishing
 ```
 
