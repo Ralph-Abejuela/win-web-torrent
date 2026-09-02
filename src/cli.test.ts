@@ -1,6 +1,6 @@
 // Tests for the wstream CLI layer only (src/cli.ts).
 // webtorrent itself is faked at its public v3 API boundary via main()'s deps.
-import { describe, it, type TestContext } from "node:test";
+import { describe, it, mock, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { EventEmitter } from "node:events";
@@ -437,6 +437,65 @@ describe("player", () => {
     await waitUntil(() => env.exits.length > 0);
     assert.equal(FakeClient.instances[0].destroyCount, 1);
     assert.equal(env.exits[0], 1);
+  });
+});
+
+describe("lifecycle", () => {
+  it("SIGTERM cleans up and exits 0", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(["magnet:?x"], { TorrentClient: FakeClient as never });
+    env.signals.SIGTERM();
+    await waitUntil(() => env.exits.length > 0);
+    assert.equal(FakeClient.instances[0].destroyCount, 1);
+    assert.equal(env.exits[0], 0);
+  });
+
+  it("second cleanup destroys only once", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(["magnet:?x"], { TorrentClient: FakeClient as never });
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 0);
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 1);
+    assert.equal(FakeClient.instances[0].destroyCount, 1); // still once
+    assert.deepEqual(env.exits, [0, 0]);
+  });
+
+  it("--keep skips cleanup rm and keeps store", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(["magnet:?x", "--keep"], { TorrentClient: FakeClient as never });
+    assert.equal(env.rms.length, 1); // sweep only
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 0);
+    assert.equal(env.rms.length, 1); // still just the sweep
+    assert.equal(env.exits[0], 0);
+  });
+
+  it("sweep removes the default temp base dir", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(["x.torrent"], { TorrentClient: FakeClient as never });
+    assert.ok(env.rms[0].endsWith("win-web-torrent"));
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 0);
+  });
+
+  it("cleanup survives a failing rm (error logged, no crash)", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(["magnet:?x"], { TorrentClient: FakeClient as never });
+    // only now make rm reject, so cleanup's rm fails
+    const failingRm = mock.method(fs.promises, "rm", async () => {
+      throw new Error("EPERM: disk on fire");
+    });
+    env.signals.SIGINT();
+    // cleanup's rm rejects — shutdown logs it; exit sentinel never fires
+    await new Promise((r) => setTimeout(r, 50));
+    failingRm.mock.restore();
+    assert.equal(env.exits.length, 0);
   });
 });
 
