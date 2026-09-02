@@ -134,9 +134,8 @@ export async function main(
     clearInterval(tick);
     console.log("\nCleaning up...");
     child?.removeAllListeners();
-    await new Promise<void>((resolve) =>
-      client.destroy({ destroyStore: !args.keep }, resolve),
-    );
+    // webtorrent v3: destroy(cb) - no opts, no destroyStore; disk cleanup is fs.rm's job
+    await new Promise<void>((resolve) => client.destroy(resolve));
     if (!args.keep)
       await fs.promises.rm(base, { recursive: true, force: true });
     return process.exit(code);
