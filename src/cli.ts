@@ -203,13 +203,14 @@ export async function main(
   );
   const port = (server.address() as { port: number }).port;
   const baseUrl = `http://127.0.0.1:${port}/webtorrent/${torrent.infoHash}`;
-  const url = `${baseUrl}/${torrent.files.indexOf(pick)}/${encodeURIComponent(pick.name)}`;
+  // webtorrent v3 routes by full file.path (forward slashes), not file index
+  const fileUrl = (f: { path: string }) =>
+    `${baseUrl}/${encodeURIComponent(f.path.replace(/\\/g, "/"))}`;
+  const url = fileUrl(pick);
   console.log(`Streaming: ${pick.name} (${humanBytes(pick.length)})`);
   console.log(`Stream URL: ${url}`);
   for (const s of subs) {
-    console.log(
-      `Subtitle URL: ${baseUrl}/${torrent.files.indexOf(s)}/${encodeURIComponent(s.name)}`,
-    );
+    console.log(`Subtitle URL: ${fileUrl(s)}`);
   }
 
   if (args.player) {
