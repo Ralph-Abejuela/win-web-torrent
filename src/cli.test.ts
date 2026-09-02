@@ -499,6 +499,36 @@ describe("lifecycle", () => {
   });
 });
 
+describe("status line", () => {
+  it("shows percent, size, speed, peers; 0-peer hint; both hint branches", async (t) => {
+    const env = testEnv(t);
+    const tor = singleTorrent();
+    tor.numPeers = 0;
+    tor.progress = 0.25;
+    FakeClient.makeTorrent = () => tor;
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    await main(["magnet:?x"], { TorrentClient: FakeClient as never });
+
+    // tick 1: 0 peers → hint shown (true branch)
+    t.mock.timers.tick(1000);
+    let out = env.writes.join("");
+    assert.ok(out.includes("25.0%  500 B/1000 B  1.0 KB/s  0 peers"));
+    assert.ok(out.includes("(0 peers — waiting)"));
+
+    // tick 2: peers arrive → hint gone (false branch)
+    tor.numPeers = 5;
+    t.mock.timers.tick(1000);
+    out = env.writes.join("");
+    const lastLine = out.split("\r").at(-1) ?? "";
+    assert.ok(lastLine.includes("5 peers"));
+    assert.ok(!lastLine.includes("(0 peers"));
+
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 0);
+    assert.equal(env.exits[0], 0);
+  });
+});
+
 describe("pure helpers", () => {
   it("humanBytes scales", () => {
     assert.equal(humanBytes(0), "0 B");
