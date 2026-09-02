@@ -385,6 +385,61 @@ describe("error paths", () => {
   });
 });
 
+describe("player", () => {
+  const makeSpawnFn = (env: Env) => (cmd: string, opts: unknown) => {
+    const child = new EventEmitter();
+    env.spawned.push({ cmd, opts, child });
+    return child as never;
+  };
+
+  it("--player spawns <cmd> <url>, player exit triggers cleanup", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(
+      ["magnet:?x", "--player", "mpv", "--player-args", "--fullscreen"],
+      { TorrentClient: FakeClient as never, spawnFn: makeSpawnFn(env) as never },
+    );
+    assert.equal(env.spawned.length, 1);
+    assert.ok(
+      env.spawned[0].cmd.startsWith(
+        "mpv --fullscreen http://127.0.0.1:4242/webtorrent/",
+      ),
+    );
+    assert.ok(env.writes.join("").includes("Player spawned: mpv --fullscreen"));
+    // player closes → cleanup with destroy + rm + exit 0
+    env.spawned[0].child.emit("exit");
+    await waitUntil(() => env.exits.length > 0);
+    assert.equal(FakeClient.instances[0].destroyCount, 1);
+    assert.equal(env.rms.length, 2);
+    assert.equal(env.exits[0], 0);
+  });
+
+  it("--player-args with no value yields empty args", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(["magnet:?x", "--player", "mpv", "--player-args"], {
+      TorrentClient: FakeClient as never,
+      spawnFn: makeSpawnFn(env) as never,
+    });
+    assert.ok(env.spawned[0].cmd.startsWith("mpv http://"));
+    env.spawned[0].child.emit("exit");
+    await waitUntil(() => env.exits.length > 0);
+  });
+
+  it("player spawn failure cleans up with exit 1", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(["magnet:?x", "--player", "no-such-exe"], {
+      TorrentClient: FakeClient as never,
+      spawnFn: makeSpawnFn(env) as never,
+    });
+    env.spawned[0].child.emit("error", new Error("ENOENT: no such file"));
+    await waitUntil(() => env.exits.length > 0);
+    assert.equal(FakeClient.instances[0].destroyCount, 1);
+    assert.equal(env.exits[0], 1);
+  });
+});
+
 describe("pure helpers", () => {
   it("humanBytes scales", () => {
     assert.equal(humanBytes(0), "0 B");
