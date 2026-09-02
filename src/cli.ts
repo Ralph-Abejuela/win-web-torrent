@@ -103,8 +103,6 @@ export interface Deps {
   createInterfaceFn?: typeof readline.createInterface;
 }
 
-if (import.meta.main) void main();
-
 export async function main(
   argv = process.argv.slice(2),
   deps: Deps = {},

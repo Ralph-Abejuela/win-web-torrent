@@ -5,7 +5,7 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "wstream": "dist/cli.js"
+    "wstream": "dist/bin.js"
   },
   "files": [
     "dist"
@@ -15,7 +15,7 @@
   },
   "scripts": {
     "dev": "node src/cli.ts",
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\""
+    "build": "esbuild src/bin.ts --bundle --platform=node --format=esm --outfile=dist/bin.js --banner:js=\"#!/usr/bin/env node\""
   },
   "dependencies": {
     "webtorrent": "^3.0.21"
