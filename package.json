@@ -15,8 +15,7 @@
   },
   "scripts": {
     "dev": "node src/cli.ts",
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\"",
-    "test": "node --test"
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\""
   },
   "dependencies": {
     "webtorrent": "^3.0.21"
