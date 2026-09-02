@@ -39,6 +39,8 @@ class FakeServer {
   listenArgs: unknown[] = [];
   listen(...a: unknown[]) {
     this.listenArgs = a;
+    // model real listen(): an explicit port wins, 0 means OS-assigned
+    if (typeof a[0] === "number" && a[0] > 0) this.port = a[0];
     queueMicrotask(() => (a[2] as (() => void) | undefined)?.());
   }
   address() {
@@ -176,6 +178,55 @@ describe("happy path", () => {
     assert.equal(FakeClient.instances[0].destroyCount, 1);
     assert.equal(env.rms.length, 2); // startup sweep + cleanup
     assert.equal(env.exits[0], 0);
+  });
+});
+
+describe("arg and exit paths", () => {
+  it("--help prints usage and exits 0", async (t) => {
+    const env = testEnv(t);
+    await assert.rejects(
+      () => main(["--help"]),
+      (e: unknown) => e instanceof CliExitError && e.code === 0,
+    );
+    assert.equal(env.exits[0], 0);
+    assert.ok(env.writes.join("").includes("Usage: wstream"));
+    assert.equal(FakeClient.instances.length, 0); // no client created
+  });
+
+  it("-h exits 0", async (t) => {
+    const env = testEnv(t);
+    await assert.rejects(
+      () => main(["-h"]),
+      (e: unknown) => e instanceof CliExitError && e.code === 0,
+    );
+    assert.equal(env.exits[0], 0);
+  });
+
+  it("no input exits 1", async (t) => {
+    const env = testEnv(t);
+    await assert.rejects(
+      () => main([]),
+      (e: unknown) => e instanceof CliExitError && e.code === 1,
+    );
+    assert.equal(env.exits[0], 1);
+    assert.equal(FakeClient.instances.length, 0);
+  });
+
+  it("--dir and --port are honored", async (t) => {
+    const env = testEnv(t);
+    FakeClient.makeTorrent = () => singleTorrent();
+    await main(["x.torrent", "--dir", "C:\\tmp\\ws-test", "--port", "8888"], {
+      TorrentClient: FakeClient as never,
+    });
+    assert.equal(env.rms[0], "C:\\tmp\\ws-test"); // sweep targeted the override
+    assert.deepEqual(FakeClient.instances[0].added?.opts, {
+      path: "C:\\tmp\\ws-test",
+    });
+    assert.ok(
+      env.writes.join("").includes("http://127.0.0.1:8888/webtorrent/"),
+    );
+    env.signals.SIGINT();
+    await waitUntil(() => env.exits.length > 0);
   });
 });
 
