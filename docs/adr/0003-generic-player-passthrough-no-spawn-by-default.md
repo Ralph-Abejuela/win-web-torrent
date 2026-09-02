@@ -1,0 +1,3 @@
+# No player spawns by default; --player is a generic passthrough
+
+Deviation from the obvious design (auto-detect and launch a player). By default `wstream` only downloads sequentially and serves the stream URL; nothing is spawned. When `--player` is given, its value is treated as an arbitrary external command and invoked as `<command> <stream-url>` — no player-specific knowledge, no allowlist. Any HTTP-capable player works, including ones we never heard of, and detection bugs cannot exist. The cost is a slightly worse out-of-box experience for users who don't pass `--player`; accepted deliberately.

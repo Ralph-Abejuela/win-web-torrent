@@ -1,0 +1,34 @@
+{
+  "name": "win-web-torrent",
+  "version": "0.1.0",
+  "description": "Windows-first torrent streaming CLI",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "wstream": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "node src/cli.ts",
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\"",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "webtorrent": "^3.0.21"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "esbuild": "^0.25.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "node-datachannel",
+      "utp-native"
+    ]
+  }
+}
