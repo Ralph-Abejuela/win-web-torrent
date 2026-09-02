@@ -336,6 +336,55 @@ describe("file selection", () => {
   });
 });
 
+describe("error paths", () => {
+  it("torrent with no media files exits 1", async (t) => {
+    const env = testEnv(t);
+    const tor = new FakeTorrent();
+    tor.files = [makeFile("readme.txt")];
+    FakeClient.makeTorrent = () => tor;
+    await assert.rejects(
+      () => main(["magnet:?x"], { TorrentClient: FakeClient as never }),
+      (e: unknown) => e instanceof CliExitError && e.code === 1,
+    );
+    assert.equal(env.exits[0], 1);
+  });
+
+  it("metadata error propagates", async (t) => {
+    testEnv(t);
+    FakeClient.makeTorrent = () => {
+      const tor = new FakeTorrent();
+      tor.ready = false;
+      queueMicrotask(() => tor.emit("error", new Error("bad metadata")));
+      return tor;
+    };
+    await assert.rejects(
+      () => main(["magnet:?x"], { TorrentClient: FakeClient as never }),
+      /bad metadata/,
+    );
+  });
+
+  it("client error propagates when metadata is pending", async (t) => {
+    testEnv(t);
+    FakeClient.makeTorrent = () => {
+      const tor = new FakeTorrent();
+      tor.ready = false;
+      return tor;
+    };
+    await assert.rejects(
+      () =>
+        main(["magnet:?x"], {
+          TorrentClient: class extends FakeClient {
+            constructor() {
+              super();
+              queueMicrotask(() => this.emit("error", new Error("client boom")));
+            }
+          } as never,
+        }),
+      /client boom/,
+    );
+  });
+});
+
 describe("pure helpers", () => {
   it("humanBytes scales", () => {
     assert.equal(humanBytes(0), "0 B");
