@@ -1,6 +1,6 @@
 ---
 status: deprecated
-superseded by ADR-0005
+description: superseded by ADR-0005
 ---
 
 # Bun toolchain
